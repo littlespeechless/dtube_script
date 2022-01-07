@@ -93,5 +93,9 @@ modules.xml
 
 # Sonarlint plugin
 .idea/sonarlint
+
+# script outputs 
 timekepper.txt
+result/*
+
 # End of https://www.toptal.com/developers/gitignore/api/jetbrains+all
