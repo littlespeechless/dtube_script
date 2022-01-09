@@ -408,7 +408,7 @@ def ips_find_provider(cid):
     with open(f'{cid}_dht.txt', 'w') as stdout:
         stdout.flush()
         try:
-            process = subprocess.Popen(['~/ipfs_bin/ipfs', 'stats', 'dht'], stdout=stdout)
+            process = subprocess.Popen(['/root/ipfs_bin/ipfs', 'stats', 'dht'], stdout=stdout)
             process.wait(timeout=300)
         except subprocess.TimeoutExpired:
             process.kill()
@@ -416,7 +416,7 @@ def ips_find_provider(cid):
     with open(f'{cid}_provid.txt', 'w') as stdout:
         stdout.flush()
         try:
-            process = subprocess.Popen(['~/ipfs_bin/ipfs', 'dht', 'findprovs', '-v', cid], stdout=stdout)
+            process = subprocess.Popen(['/root/ipfs_bin/ipfs', 'dht', 'findprovs', '-v', cid], stdout=stdout)
             process.wait(timeout=300)
         except subprocess.TimeoutExpired:
             process.kill()
