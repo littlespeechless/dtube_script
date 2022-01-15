@@ -1,5 +1,6 @@
 import copy
 import ipaddress
+import os
 import subprocess
 import sys
 from datetime import datetime
@@ -428,11 +429,15 @@ def main(preload=False):
     all_cid = []
     # start reading all cid
     if not preload:
-        with open(f'{today}_cid.txt', 'r') as stdin:
-            for line in stdin.readlines():
-                line = line.replace("\n", "")
-                all_cid.append(line)
-                ips_find_provider(line)
+        for _, _, files in os.walk("."):
+            files.sort()
+            for file in files:
+                if '_cid' in file:
+                    with open(f'{today}_cid.txt', 'r') as stdin:
+                        for line in stdin.readlines():
+                            line = line.replace("\n", "")
+                            all_cid.append(line)
+                            ips_find_provider(line)
 
     # read daemon log file
     # {cid : result_host_dic={}}
