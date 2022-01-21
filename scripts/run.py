@@ -18,7 +18,7 @@ base = "https://search.d.tube/avalon.contents/_search?&size=10000&q="
 
 headers = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36"}
-waittime = 2 * 60
+waittime = 5 * 60
 tmpvideofile = "/tmp/tmpvidfile"
 
 
@@ -32,8 +32,6 @@ class Video:
         self.upload_date = str(date_obj.date())
         # query type which we got
         self.category = category
-        self.local_check_ts = None
-        self.public_check_ts = None
         self.local_data = {}
         self.public_data = {}
 
@@ -179,14 +177,8 @@ def bw(vid: Video, gateway, return_dic):
         }
 
         if "local" in gateway:
-            return_dic["local_check_ts"] = time.time()
-            vid.local_check_ts = time.time()
-            vid.local_data = data
             return_dic['local'] = data
         else:
-            return_dic["public_check_ts"] = time.time()
-            vid.public_check_ts = time.time()
-            vid.public_data = copy.deepcopy(data)
             return_dic['public'] = data
 
         print(vid.cid,
@@ -200,6 +192,11 @@ def bw(vid: Video, gateway, return_dic):
         print(e)
         return_dic['error'] = True
         return
+
+
+def temp_progress(vid):
+    with open('temp.json', 'a') as fout:
+        json.dump(vid, fout)
 
 
 def run_video_test(vid):
@@ -227,10 +224,8 @@ def run_video_test(vid):
         # check if error
         if return_dict['error']:
             vid.local_data = None
-            vid.local_check_ts = ''
         else:
             vid.local_data = return_dict['local']
-            vid.local_check_ts = return_dict['local_check_ts']
     # public gateway
     time_out = False
     return_dict['error'] = False
@@ -250,18 +245,15 @@ def run_video_test(vid):
     if not time_out:
         if return_dict['error']:
             vid.public_data = None
-            vid.public_check_ts = ''
         else:
             vid.public_data = return_dict['public']
-            vid.public_check_ts = return_dict['public_check_ts']
-
     # print(vid.__dict__)
     # print(return_dict)
 
 
 if __name__ == "__main__":
     # prev video
-    # { cid, q_type, upload_date, last_check_date, stats: T/F}
+    # { cid, q_type, upload_date}
     # daily file
     # { cid, q_type, gw , data ... } // success
     # { cid, q_type, gw , null} // fail
@@ -276,92 +268,67 @@ if __name__ == "__main__":
         with open("all_vid_summary.json", "r") as f:
             all_vid_summary = json.load(f)
     except Exception as e:
-        # {"cid":{"type":[], "upload_date":[], "last_check_date":[], "status":[]}}
+        # {"cid":{"type":[], "upload_date":[],}}
         all_vid_summary = {}
-
+    today = datetime.now().date()
     # get daily cid
     daily_summary, new_videos = cidsearch()
-
+    # save daily summary
+    with open(f'{today}-summary.json', 'w') as fout:
+        json.dump(daily_summary, fout)
     # test_vid = {'trending': [new_videos['trending'][0]]}
     # new_videos = test_vid
 
-    # record daily vids
-    for i in new_videos:
-        for vid in new_videos[i]:
-            run_video_test(vid)
-    # prev vid data
-    vid_list = []
-    new_vid_cid_list = []
-    new_vid_list = []
-    for i in new_videos:
-        vid: Video
-        for vid in new_videos[i]:
-            new_vid_cid_list.append(vid.cid)
-            new_vid_list.append(vid)
-            # add new entry record
-            if vid.cid not in all_vid_summary:
-                all_vid_summary[vid.cid] = {
-                    "category": vid.category,
-                    "ts": vid.ts,
-                    "dur": vid.dur,
-                    "last_local_ts": "",
-                    "local_status": True,
-                    "last_public_ts": "",
-                    "public_status": True
-                }
-            if vid.cid in all_vid_summary:
-                # update check info
+    # remove duplicate cid and run daily vid
+    daily_cids = []
+    daily_reachable_videos = []  # array of reachable videos
+    daily_reachable_videos_cid = []
+    for tag in new_videos:
+        for vid in new_videos[tag]:
+            if vid.cid not in daily_cids:
+                daily_cids.append(vid.cid)
+                run_video_test(vid)
+                temp_progress(vid)
                 if vid.local_data is not None:
-                    all_vid_summary[vid.cid]["last_local_ts"] = vid.local_check_ts
-                    all_vid_summary[vid.cid]["local_status"] = True
-                else:
-                    all_vid_summary[vid.cid]["local_status"] = False
-
-                if vid.public_data is not None:
-                    all_vid_summary[vid.cid]["last_public_ts"] = vid.public_check_ts
-                    all_vid_summary[vid.cid]["public_status"] = True
-                else:
-                    all_vid_summary[vid.cid]["public_status"] = False
+                    daily_reachable_videos.append(vid)
+                    daily_reachable_videos_cid.append(vid.cid)
 
     # recreate all prev vid object
+    daily_video_data = copy.deepcopy(daily_reachable_videos)
     for cid in all_vid_summary:
-        if cid not in new_vid_cid_list:
+        # avoid duplicate run
+        if cid not in daily_reachable_videos_cid:
             dur = all_vid_summary[cid]["dur"]
             ts = all_vid_summary[cid]["ts"]
             category = all_vid_summary[cid]["category"]
             vid = Video(cid, dur, ts, category)
-            # run data
+            # run test
             run_video_test(vid)
-            # store info
-            vid_list.append(vid)
-
-    for vid in vid_list:
-        if vid.local_data is not None:
-            all_vid_summary[vid.cid]["last_local_ts"] = vid.local_check_ts
-            all_vid_summary[vid.cid]["local_status"] = True
-        else:
-            all_vid_summary[vid.cid]["local_status"] = False
-
-        if vid.public_data is not None:
-            all_vid_summary[vid.cid]["last_public_ts"] = vid.public_check_ts
-            all_vid_summary[vid.cid]["public_status"] = True
-        else:
-            all_vid_summary[vid.cid]["public_status"] = False
-
-    daily_record_data = vid_list + new_vid_list
-
+            temp_progress(vid)
+            # store daily information
+            daily_video_data.append(vid)
+            # store daily reachable info
+            if vid.local_data is not None:
+                daily_reachable_videos.append(vid)
+                daily_reachable_videos_cid.append(vid.cid)
+    # add all new reachable video into video database
+    for vid in daily_reachable_videos:
+        vid: Video
+        # add new entry record
+        if vid.cid not in all_vid_summary:
+            all_vid_summary[vid.cid] = {
+                "category": vid.category,
+                "ts": vid.ts,
+                "dur": vid.dur,
+            }
     # save all_vid_summary
     with open('all_vid_summary.json', 'w') as fout:
         json.dump(all_vid_summary, fout)
     # save today's record
-    today = datetime.now().date()
-    with open(f'{today}.json', 'x') as fout:
-        json.dump([ob.__dict__ for ob in daily_record_data], fout)
-    # save daily summary
-    with open(f'{today}-summary.json', 'x') as fout:
-        json.dump(daily_summary, fout)
+    with open(f'{today}.json', 'w') as fout:
+        json.dump([ob.__dict__ for ob in daily_video_data], fout)
     # save cid to folder
-    daily_cid = [ob.cid for ob in daily_record_data]
+    daily_cid = daily_reachable_videos_cid
     with open(f'{today}/{today}_cid.txt', 'w') as fout:
         for cid in daily_cid:
             fout.write(cid + '\n')
