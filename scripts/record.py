@@ -366,7 +366,7 @@ def get_peer_ip(result_host_dic: dict):
     """
     provider_ip = {}
     for peer in result_host_dic.keys():
-        process = subprocess.Popen(['~/ipfs_bin/ipfs', 'dht', 'findpeer', peer], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        process = subprocess.Popen(['/root/ipfs_bin/ipfs', 'dht', 'findpeer', peer], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         # case of no route find
         for line in process.stderr.readlines():
             if str(line) != '':
@@ -433,7 +433,7 @@ def main(preload=False):
             files.sort()
             for file in files:
                 if '_cid' in file:
-                    with open(f'{today}_cid.txt', 'r') as stdin:
+                    with open(f'{file}', 'r') as stdin:
                         for line in stdin.readlines():
                             line = line.replace("\n", "")
                             all_cid.append(line)
@@ -488,4 +488,5 @@ if __name__ == '__main__':
     preload = False
     if len(sys.argv) == 2:
         preload = True
+        print("preloaded")
     main(preload)
