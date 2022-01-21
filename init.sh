@@ -8,7 +8,7 @@ killall ipfs
 # start record hop information
 cd $(date +%F)
 ~/ipfs_bin/ipfs repo gc
-~/ipfs_bin/ipfs daemon --enable-gc > $(date +%F)_daemon.txt &
+~/ipfs_bin/ipfs daemon --enable-gc > $(date +%F)_daemon.txt 2>&1 &
 sleep 600
 ~/ipfs_bin/ipfs log level dht warn
 python /scripts/record.py
