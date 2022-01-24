@@ -3,6 +3,7 @@ cd /result
 ipfs repo gc
 ipfs daemon --enable-gc &
 mkdir $(date +%F)
+sleep 600
 python /scripts/run.py
 killall ipfs
 # start record hop information
