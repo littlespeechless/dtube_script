@@ -196,7 +196,7 @@ def bw(vid: Video, gateway, return_dic):
 
 def temp_progress(video, date):
     with open(f'{date}_temp.json', 'a') as fout:
-        json.dump(video, fout)
+        json.dump(video.__dict__, fout)
 
 
 def run_video_test(vid):
