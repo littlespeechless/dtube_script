@@ -2,7 +2,7 @@ FROM ubuntu:20.04
 
 # Install base utilities
 RUN apt update && \
-    apt-get install -y wget iputils-ping iperf traceroute git psmisc && \
+    apt-get install -y wget iputils-ping iperf traceroute git psmisc sudo && \
     apt-get clean
     
 # Install anaconda 
