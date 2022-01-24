@@ -194,9 +194,9 @@ def bw(vid: Video, gateway, return_dic):
         return
 
 
-def temp_progress(vid):
-    with open('temp.json', 'a') as fout:
-        json.dump(vid, fout)
+def temp_progress(video, date):
+    with open(f'{date}_temp.json', 'a') as fout:
+        json.dump(video, fout)
 
 
 def run_video_test(vid):
@@ -288,7 +288,7 @@ if __name__ == "__main__":
             if vid.cid not in daily_cids:
                 daily_cids.append(vid.cid)
                 run_video_test(vid)
-                temp_progress(vid)
+                temp_progress(vid, today)
                 if vid.local_data is not None:
                     daily_reachable_videos.append(vid)
                     daily_reachable_videos_cid.append(vid.cid)
@@ -304,7 +304,7 @@ if __name__ == "__main__":
             vid = Video(cid, dur, ts, category)
             # run test
             run_video_test(vid)
-            temp_progress(vid)
+            temp_progress(vid, today)
             # store daily information
             daily_video_data.append(vid)
             # store daily reachable info
