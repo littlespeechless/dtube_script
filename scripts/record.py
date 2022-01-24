@@ -335,7 +335,7 @@ def get_rtt(address: Address):
     if address.ip_type == 'ip6':
         return
     try:
-        host = icmplib.ping(address.ip, count=5, interval=0.2, privileged=False)
+        host = icmplib.ping(address.ip, count=5, interval=0.2, privileged=True)
     except Exception as e:
         print(e)
         return
