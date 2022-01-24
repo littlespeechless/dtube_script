@@ -1,4 +1,3 @@
-sysctl -w net.core.rmem_max=2500000
 cd /result
 ipfs repo gc
 ipfs daemon --enable-gc &
