@@ -1,5 +1,5 @@
 FROM ubuntu:20.04
-
+# ENV TZ="America/New_York"
 # Install base utilities
 RUN apt update && \
     apt-get install -y wget iputils-ping iperf traceroute git psmisc sudo && \
