@@ -1,5 +1,7 @@
+import argparse
 import copy
 import ipaddress
+import logging
 import os
 import subprocess
 import sys
@@ -366,47 +368,52 @@ def get_peer_ip(result_host_dic: dict):
     """
     provider_ip = {}
     for peer in result_host_dic.keys():
-        process = subprocess.Popen(['/root/ipfs_bin/ipfs', 'dht', 'findpeer', peer], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        process = subprocess.Popen(['/root/ipfs_bin/ipfs', 'dht', 'findpeer', peer], stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE)
         # case of no route find
         for line in process.stderr.readlines():
             if str(line) != '':
                 provider_ip[peer] = []
                 break
-
-        for line in process.stdout.readlines():
-            line = line.decode('utf-8')
-            line = line.replace("\n", "")
-            line = line.split("/")
-            ip_type = line[1]
-            ip_value = line[2]
-            protocol = line[3]
-            port = line[4]
-            if ip_type == 'ip6' and ip_value == '::1':
-                # local v6 ignore
-                continue
-            elif ip_type == 'ip4':
-                # exclude private ip address
-                if ipaddress.ip_address(ip_value) in ipaddress.IPv4Network('10.0.0.0/8') or \
-                        ipaddress.ip_address(ip_value) in ipaddress.IPv4Network('172.16.0.0/12') or \
-                        ipaddress.ip_address(ip_value) in ipaddress.IPv4Network('127.0.0.0/8') or \
-                        ipaddress.ip_address(ip_value) in ipaddress.IPv4Network('192.168.0.0/16'):
+        with open(f'{peer}_ip.txt', 'w+') as stdout:
+            for line in process.stdout.readlines():
+                line = line.decode('utf-8')
+                # store all peer ip
+                stdout.write(line)
+                line = line.replace("\n", "")
+                line = line.split("/")
+                ip_type = line[1]
+                ip_value = line[2]
+                protocol = line[3]
+                port = line[4]
+                if ip_type == 'ip6' and ip_value == '::1':
+                    # local v6 ignore
                     continue
-            # add valid ip address info
-            if peer not in provider_ip.keys():
-                provider_ip[peer] = []
-            address = Address(ip_value, ip_type, port, protocol)
-            provider_ip[peer].append(address)
+                elif ip_type == 'ip4':
+                    # exclude private ip address
+                    if ipaddress.ip_address(ip_value) in ipaddress.IPv4Network('10.0.0.0/8') or \
+                            ipaddress.ip_address(ip_value) in ipaddress.IPv4Network('172.16.0.0/12') or \
+                            ipaddress.ip_address(ip_value) in ipaddress.IPv4Network('127.0.0.0/8') or \
+                            ipaddress.ip_address(ip_value) in ipaddress.IPv4Network('192.168.0.0/16'):
+                        continue
+                # add valid ip address info
+                logging.info(f'Peer {peer} has external IP {ip_value}:{port}, {ip_type}, {protocol}')
+                if peer not in provider_ip.keys():
+                    provider_ip[peer] = []
+                address = Address(ip_value, ip_type, port, protocol)
+                provider_ip[peer].append(address)
     return provider_ip
 
 
-def ips_find_provider(cid):
+def ips_find_provider(cid, dir_prefix='.'):
     """
     call ipfs to find provider for cid specified, and do a DHT dump before finding
+    :param dir_prefix: dir to store the file
     :param cid: cid to find
     :return: None
     """
 
-    with open(f'{cid}_dht.txt', 'w') as stdout:
+    with open(f'{dir_prefix}/{cid}_dht.txt', 'w') as stdout:
         stdout.flush()
         try:
             process = subprocess.Popen(['/root/ipfs_bin/ipfs', 'stats', 'dht'], stdout=stdout)
@@ -414,7 +421,7 @@ def ips_find_provider(cid):
         except subprocess.TimeoutExpired:
             process.kill()
 
-    with open(f'{cid}_provid.txt', 'w') as stdout:
+    with open(f'{dir_prefix}/{cid}_provid.txt', 'w') as stdout:
         stdout.flush()
         try:
             process = subprocess.Popen(['/root/ipfs_bin/ipfs', 'dht', 'findprovs', '-v', cid], stdout=stdout)
@@ -423,12 +430,12 @@ def ips_find_provider(cid):
             process.kill()
 
 
-def main(preload=False):
+def main(is_loaded):
 
     today = datetime.now().date()
     all_cid = []
     # start reading all cid
-    if not preload:
+    if not is_loaded:
         for _, _, files in os.walk("."):
             files.sort()
             for file in files:
@@ -445,7 +452,7 @@ def main(preload=False):
     all_stats = []
     with open(f'{today}_daemon.txt', 'r') as stdin:
         for line in stdin.readlines():
-            if "cid" not in line:
+            if "routing.go:532" not in line or "":
                 continue
             index = line.find("cid")
             line = line.replace("\n", "")
@@ -461,23 +468,18 @@ def main(preload=False):
     # hop
     for cid in all_provider_dic:
         _, ipfs_hop = analyse_ipfs_hops(cid, all_provider_dic[cid])
-        if ipfs_hop == 0:
-            # case of no result find
-            stats = Stats(cid, ipfs_hop, {})
-            all_stats.append(stats)
-            continue
-        print(f'IPFS_HOP {ipfs_hop}')
+        logging.info(f'CID {cid} ipfs hop = {ipfs_hop}')
         providers = get_peer_ip(all_provider_dic[cid])
+        logging.info(f'CID {cid} providers = {providers}')
         stats = Stats(cid, ipfs_hop, providers)
         all_stats.append(stats)
         for peer in providers.keys():
-            print(peer)
             for address in providers[peer]:
-                print(f'Address {address.__dict__}')
                 get_rtt(address)
                 get_ip_hop(address)
-                print(f'Address {address.__dict__}')
+                logging.info(f'Peer {peer} has Address {address.__dict__}')
     # write to file
+    logging.info("Saving Summary")
     with open(f'{today}_summary.json', 'w') as fout:
         json.dump(all_stats, fout, cls=StatsEncoder)
     with open(f'{today}_stats.txt', 'w') as fout:
@@ -485,8 +487,15 @@ def main(preload=False):
 
 
 if __name__ == '__main__':
-    preload = False
-    if len(sys.argv) == 2:
-        preload = True
-        print("preloaded")
+    # setup logger
+    logging.basicConfig(format='%(asctime)s %(levelname)-8s %(message)s',
+                        level=logging.INFO,
+                        datefmt='%Y-%m-%d %H:%M:%S',
+                        filename='record.log')  # stream=sys.stdout
+    # parse args
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-p', '--preload', default=False, action="store_true", help="Preloaded Info")
+    args = parser.parse_args()
+    logging.info(f'Preload = {args.preload}')
+    preload = args.preload
     main(preload)
