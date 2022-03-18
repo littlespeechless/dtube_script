@@ -1,4 +1,5 @@
 import argparse
+import concurrent.futures
 import copy
 import ipaddress
 import logging
@@ -430,8 +431,26 @@ def ips_find_provider(cid, dir_prefix='.'):
             process.kill()
 
 
-def main(is_loaded):
+def post_process(cid, all_provider_dic):
+    """
+    postprocess cid files, i.e ipfs hop, ip hop, rtt, ip etc
+    :param all_provider_dic: dic contains cid -> {hosts : provider}
+    :param cid: cid of the file
+    :return: Stats
+    """
+    _, ipfs_hop = analyse_ipfs_hops(cid, all_provider_dic[cid])
+    logging.info(f'CID {cid} ipfs hop = {ipfs_hop}')
+    providers = get_peer_ip(all_provider_dic[cid])
+    logging.info(f'CID {cid} providers = {providers}')
+    stats = Stats(cid, ipfs_hop, providers)
+    for peer in providers.keys():
+        for address in providers[peer]:
+            get_rtt(address)
+            get_ip_hop(address)
+            logging.info(f'Peer {peer} has Address {address.__dict__}')
+    return stats
 
+def main(is_loaded):
     today = datetime.now().date()
     all_cid = []
     # start reading all cid
@@ -465,19 +484,28 @@ def main(is_loaded):
             else:
                 result_host_dic = all_provider_dic[cid]
             result_host_dic[line[5]] = line[3]
+
     # hop
-    for cid in all_provider_dic:
-        _, ipfs_hop = analyse_ipfs_hops(cid, all_provider_dic[cid])
-        logging.info(f'CID {cid} ipfs hop = {ipfs_hop}')
-        providers = get_peer_ip(all_provider_dic[cid])
-        logging.info(f'CID {cid} providers = {providers}')
-        stats = Stats(cid, ipfs_hop, providers)
-        all_stats.append(stats)
-        for peer in providers.keys():
-            for address in providers[peer]:
-                get_rtt(address)
-                get_ip_hop(address)
-                logging.info(f'Peer {peer} has Address {address.__dict__}')
+
+    # star multi-threading for post process
+    all_stats = []
+    with concurrent.futures.ProcessPoolExecutor(max_workers=8) as executor:
+        future_to_postprocess = {executor.submit(post_process, cid, all_provider_dic): cid
+                                 for cid in all_provider_dic}
+        for future in concurrent.futures.as_completed(future_to_postprocess):
+            cid = future_to_postprocess[future]
+            logging.info(f'CID {cid} Getting Result')
+            try:
+                stats = future.result()
+            except Exception as exc:
+                logging.info(f'Error {exc}')
+                stats = Stats(cid, *[None for _ in range(7)])
+            all_stats.append(stats)
+            # save progress
+            logging.info(f'Saving Progress CID {cid}')
+            with open('progress.txt', 'a') as fout:
+                json.dump(copy.copy(stats), fout, cls=StatsEncoder)
+                fout.write('\n')
     # write to file
     logging.info("Saving Summary")
     with open(f'{today}_summary.json', 'w') as fout:
