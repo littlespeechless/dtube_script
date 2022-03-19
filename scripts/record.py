@@ -499,7 +499,7 @@ def main(is_loaded):
                 stats = future.result()
             except Exception as exc:
                 logging.info(f'Error {exc}')
-                stats = Stats(cid, *[None for _ in range(7)])
+                stats = Stats(cid, None, None)
             all_stats.append(stats)
             # save progress
             logging.info(f'Saving Progress CID {cid}')
