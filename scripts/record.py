@@ -450,25 +450,25 @@ def post_process(cid, all_provider_dic):
             logging.info(f'Peer {peer} has Address {address.__dict__}')
     return stats
 
+
 def main(is_loaded):
     today = datetime.now().date()
     all_cid = []
     # start reading all cid
-    if not is_loaded:
-        for _, _, files in os.walk("."):
-            files.sort()
-            for file in files:
-                if '_cid' in file:
-                    with open(f'{file}', 'r') as stdin:
-                        for line in stdin.readlines():
-                            line = line.replace("\n", "")
-                            all_cid.append(line)
+    for _, _, files in os.walk("."):
+        files.sort()
+        for file in files:
+            if '_cid' in file:
+                with open(f'{file}', 'r') as stdin:
+                    for line in stdin.readlines():
+                        line = line.replace("\n", "")
+                        all_cid.append(line)
+                        if not is_loaded:
                             ips_find_provider(line)
 
     # read daemon log file
     # {cid : result_host_dic={}}
     all_provider_dic = {}
-    all_stats = []
     with open(f'{today}_daemon.txt', 'r') as stdin:
         for line in stdin.readlines():
             if "routing.go:532" not in line or "":
@@ -478,6 +478,8 @@ def main(is_loaded):
             line = line[index:]
             line = line.split(" ")
             cid = line[1]
+            if cid not in all_cid:
+                continue
             if cid not in all_provider_dic.keys():
                 result_host_dic = {}
                 all_provider_dic[cid] = result_host_dic
