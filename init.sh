@@ -12,7 +12,7 @@ export IPFS_PATH=$(date +%F)-ipfs
 ~/ipfs_bin/ipfs config show
 ~/ipfs_bin/ipfs repo gc
 ~/ipfs_bin/ipfs daemon --enable-gc > $(date +%F)/$(date +%F)_daemon.txt 2>&1 &
-sleep 30
+sleep 600
 ~/ipfs_bin/ipfs log level dht warn
 ~/ipfs_bin/ipfs log level bitswap warn
 python /scripts/collect_data.py
@@ -24,7 +24,7 @@ echo $(pwd)
 export IPFS_PATH=/result/$(date +%F)-ipfs
 ~/ipfs_bin/ipfs repo gc
 ~/ipfs_bin/ipfs daemon --enable-gc > $(date +%F)_analysis.txt 2>&1 &
-sleep 30
+sleep 600
 python /scripts/record.py -p
 killall ipfs
 
