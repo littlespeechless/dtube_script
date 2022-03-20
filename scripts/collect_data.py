@@ -24,7 +24,7 @@ tmpvideofile = "/tmp/tmpvidfile"
 
 
 class Video:
-    def __init__(self, cid, dur, ts, category):
+    def __init__(self, cid, dur, ts, category, gw):
         self.cid = cid
         self.dur = dur
         # upload time
@@ -33,6 +33,7 @@ class Video:
         self.upload_date = str(date_obj.date())
         # query type which we got
         self.category = category
+        self.public_gateway = gw
         self.local_data = {}
         self.public_data = {}
 
@@ -90,11 +91,13 @@ def cidsearch():
                 elif "ipfs" in json_obj["files"].keys():
                     try:
                         cid = json_obj["files"]["ipfs"]["vid"]["src"]
-                        new_vid = Video(cid, duration, timestamp, i)
+                        gateway = json_obj["files"]["ipfs"]["gw"]
+                        new_vid = Video(cid, duration, timestamp, i, gateway)
                         ans[i].append(new_vid)
                         stats[i]["ipfs"] += 1
                         # success cast vid and add total count
                         stats[i]["total_video"] += 1
+
                     except Exception as e:
                         print(f'Error IPFS {json_obj["files"]["ipfs"]}')
                         # print("hi")
@@ -205,7 +208,8 @@ def run_video_test(video, date):
     ips_find_provider(video.cid, dir_prefix=f'{date}')
     # start record data
     default_gw = "http://localhost:8080/ipfs/"
-    dtube_gw = "https://player.d.tube/ipfs/"
+    # dtube_gw = "https://player.d.tube/ipfs/"
+    dtube_gw = f"{video.public_gateway}/ipfs/"
     manager = multiprocessing.Manager()
     return_dict = manager.dict()
     x = multiprocessing.Process(target=bw, args=(video, default_gw, return_dict))
