@@ -299,6 +299,16 @@ if __name__ == "__main__":
                 if vid.local_data is not None:
                     daily_reachable_videos.append(vid)
                     daily_reachable_videos_cid.append(vid.cid)
+                else:
+                    # check if the video ever exist in ipfs b4
+                    with open(f'{today}/{vid.cid}_provid.txt', 'w') as fin:
+                        for line in fin.readlines():
+                            if "provider:" in line:
+                                daily_reachable_videos.append(vid)
+                                daily_reachable_videos_cid.append(vid.cid)
+                                break
+            else:
+                vid.category += f'{tag}'
 
     # recreate all prev vid object
     daily_video_data = copy.deepcopy(daily_reachable_videos)
@@ -308,9 +318,10 @@ if __name__ == "__main__":
             dur = all_vid_summary[cid]["dur"]
             ts = all_vid_summary[cid]["ts"]
             category = all_vid_summary[cid]["category"]
-            vid = Video(cid, dur, ts, category)
+            gw = all_vid_summary[cid]["gw"]
+            vid = Video(cid, dur, ts, category, gw)
             # run test
-            run_video_test(vid)
+            run_video_test(vid, today)
             temp_progress(vid, today)
             # store daily information
             daily_video_data.append(vid)
@@ -327,6 +338,7 @@ if __name__ == "__main__":
                 "category": vid.category,
                 "ts": vid.ts,
                 "dur": vid.dur,
+                "gw": vid.public_gateway
             }
     # save all_vid_summary
     with open('all_vid_summary.json', 'w') as fout:
