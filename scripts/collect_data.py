@@ -1,4 +1,5 @@
 import copy
+import logging
 import time
 import json
 from datetime import datetime
@@ -99,14 +100,14 @@ def cidsearch():
                         stats[i]["total_video"] += 1
 
                     except Exception as e:
-                        print(f'Error IPFS {json_obj["files"]["ipfs"]}')
+                        logging.info(f'Error IPFS {json_obj["files"]["ipfs"]}')
                         # print("hi")
                         # # fall back to old json format
                         # cid = json_obj["files"]["ipfs"]["videohash"]
                         # new_vid = Video(cid, duration, timestamp, i)
                         # ans[i].append(new_vid)
                 else:
-                    print(json_obj["files"].keys())
+                    logging.info(json_obj["files"].keys())
                     continue
 
             except Exception as e:
@@ -141,7 +142,7 @@ def bw(vid: Video, gateway, return_dic):
         url = gateway + vid.cid
         #    url = "http://gateway.ipfs.io/ipfs/" + cid
         setwtime(time.time())
-        print(url)
+        logging.info(f'Connecting to {url}')
         # global buf
         # buf = io.BytesIO()
 
@@ -185,7 +186,7 @@ def bw(vid: Video, gateway, return_dic):
         else:
             return_dic['public'] = data
 
-        print(vid.cid,
+        logging.info(vid.cid,
               "overhead:" + str(m["starttransfer-time"]),
               "download_time:" + str((m["total-time"] - m["starttransfer-time"])),
               "file_size:" + str(m["length"]),
@@ -193,7 +194,7 @@ def bw(vid: Video, gateway, return_dic):
               "stall_rate:" + str(stall_rate),
               "bw(bits/s):" + str(m["length"] / (m["total-time"] - m["starttransfer-time"])))
     except Exception as e:
-        print(e)
+        logging.info(e)
         return_dic['error'] = True
         return
 
@@ -204,6 +205,7 @@ def temp_progress(video, date):
 
 
 def run_video_test(video, date):
+    logging.info(f'Running Video {video.cid}')
     # pre collect data
     ips_find_provider(video.cid, dir_prefix=f'{date}')
     # start record data
@@ -221,7 +223,7 @@ def run_video_test(video, date):
         time.sleep(1)
         if time.time() - getwtime() > waittime:
             x.terminate()
-            print("local_gw", video.cid, "timeout")
+            logging.info("local_gw", video.cid, "timeout")
             time_out = True
             video.local_data = None
             break
@@ -243,7 +245,7 @@ def run_video_test(video, date):
         time.sleep(1)
         if time.time() - getwtime() > waittime:
             x.terminate()
-            print("public_gw", video.cid, "timeout")
+            logging.info("public_gw", video.cid, "timeout")
             video.public_data = None
             time_out = True
             break
@@ -259,6 +261,12 @@ def run_video_test(video, date):
 
 
 if __name__ == "__main__":
+    today = datetime.now().date()
+    # setup logger
+    logging.basicConfig(format='%(asctime)s %(levelname)-8s %(message)s',
+                        level=logging.INFO,
+                        datefmt='%Y-%m-%d %H:%M:%S',
+                        filename=f'{today}.log')  # stream=sys.stdout
     # prev video
     # { cid, q_type, upload_date}
     # daily file
@@ -276,16 +284,16 @@ if __name__ == "__main__":
             all_vid_summary = json.load(f)
     except Exception as e:
         # {"cid":{"type":[], "upload_date":[],}}
+        logging.info("No all_vid_summary, first time running?")
         all_vid_summary = {}
-    today = datetime.now().date()
     # get daily cid
     daily_summary, new_videos = cidsearch()
+    logging.info(f'New videos: {new_videos}')
     # save daily summary
     with open(f'{today}-summary.json', 'w') as fout:
         json.dump(daily_summary, fout)
     # test_vid = {'trending': [new_videos['trending'][0]]}
     # new_videos = test_vid
-
     # remove duplicate cid and run daily vid
     daily_cids = []
     daily_reachable_videos = []  # array of reachable videos
@@ -334,6 +342,7 @@ if __name__ == "__main__":
         vid: Video
         # add new entry record
         if vid.cid not in all_vid_summary:
+            logging.info(f'Adding new video {vid.cid}')
             all_vid_summary[vid.cid] = {
                 "category": vid.category,
                 "ts": vid.ts,
