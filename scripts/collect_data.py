@@ -186,13 +186,13 @@ def bw(vid: Video, gateway, return_dic):
         else:
             return_dic['public'] = data
 
-        logging.info(vid.cid,
-              "overhead:" + str(m["starttransfer-time"]),
-              "download_time:" + str((m["total-time"] - m["starttransfer-time"])),
-              "file_size:" + str(m["length"]),
-              "video_length:" + str(vid.dur),
-              "stall_rate:" + str(stall_rate),
-              "bw(bits/s):" + str(m["length"] / (m["total-time"] - m["starttransfer-time"])))
+        logging.info(vid.cid +
+                     "\noverhead: " + str(m["starttransfer-time"]) +
+                     "\ndownload_time: " + str((m["total-time"] - m["starttransfer-time"])) +
+                     "\nfile_size: " + str(m["length"]) +
+                     "\nvideo_length: " + str(vid.dur) +
+                     "\nstall_rate: " + str(stall_rate) +
+                     "\nbw(bits/s): " + str(m["length"] / (m["total-time"] - m["starttransfer-time"])))
     except Exception as e:
         logging.info(e)
         return_dic['error'] = True
@@ -223,7 +223,7 @@ def run_video_test(video, date):
         time.sleep(1)
         if time.time() - getwtime() > waittime:
             x.terminate()
-            logging.info("local_gw", video.cid, "timeout")
+            logging.info(f"local_gw {video.cid} timeout")
             time_out = True
             video.local_data = None
             break
@@ -245,7 +245,7 @@ def run_video_test(video, date):
         time.sleep(1)
         if time.time() - getwtime() > waittime:
             x.terminate()
-            logging.info("public_gw", video.cid, "timeout")
+            logging.info(f"public_gw {video.cid} timeout")
             video.public_data = None
             time_out = True
             break
@@ -309,14 +309,16 @@ if __name__ == "__main__":
                     daily_reachable_videos_cid.append(vid.cid)
                 else:
                     # check if the video ever exist in ipfs b4
-                    with open(f'{today}/{vid.cid}_provid.txt', 'w') as fin:
+                    with open(f'{today}/{vid.cid}_provid.txt', 'r') as fin:
                         for line in fin.readlines():
                             if "provider:" in line:
                                 daily_reachable_videos.append(vid)
                                 daily_reachable_videos_cid.append(vid.cid)
                                 break
             else:
-                vid.category += f'{tag}'
+                for v in daily_reachable_videos:
+                    if v.cid == vid.cid:
+                        v.category += f' {tag}'
 
     # recreate all prev vid object
     daily_video_data = copy.deepcopy(daily_reachable_videos)
