@@ -56,20 +56,29 @@ class Address:
 
 
 class Stats:
-    def __init__(self, cid, ipfs_hop, providers):
+    def __init__(self, cid, ipfs_hop, providers, actual_provider):
         self.cid = cid
         self.ipfs_hop = ipfs_hop
         self.providers = providers
+        self.actual_provider = actual_provider
 
 
 class StatsEncoder(JSONEncoder):
     def default(self, o: Stats):
         json_string = o.__dict__
         providers = json_string['providers']
-        providers_new = copy.deepcopy(providers)
-        for key in providers.keys():
-            providers_new[key] = [ob.__dict__ for ob in providers[key]]
-        json_string['providers'] = providers_new
+        actual_providers = json_string['actual_provider']
+        if providers is not None and actual_providers is not None:
+            providers_new = copy.deepcopy(providers)
+            actual_providers_new = copy.deepcopy(actual_providers)
+            for key in providers.keys():
+                # logging.info(f'{key} => {type(providers[key])} => {providers[key]}')
+                providers_new[key] = [ob.__dict__ for ob in providers[key]]
+
+            for key in actual_providers.keys():
+                actual_providers_new[key] = [ob.__dict__ for ob in actual_providers[key]]
+            json_string['providers'] = providers_new
+            json_string['actual_provider'] = actual_providers_new
         return json_string
 
 
@@ -323,10 +332,10 @@ def get_ip_hop(address: Address):
         line = line.decode('utf-8')
         line = line.replace("\n", "")
         line = line.lstrip()
-        print(line)
+        logging.info(line)
         address.ip_hop = line.split(" ")[0]
     except Exception:
-        print(line)
+        logging.info(f'Error at {line}')
 
 
 def get_rtt(address: Address):
@@ -340,11 +349,11 @@ def get_rtt(address: Address):
     try:
         host = icmplib.ping(address.ip, count=5, interval=0.2, privileged=True)
     except Exception as e:
-        print(e)
+        logging.info(f'Error {e}')
         return
     if host.is_alive:
         address.rtt = host.avg_rtt
-        print(host.rtts)
+        logging.info(host.rtts)
     else:
         # try to use traceroute to get rtt
         process = subprocess.Popen(
@@ -431,23 +440,77 @@ def ips_find_provider(cid, dir_prefix='.'):
             process.kill()
 
 
-def post_process(cid, all_provider_dic):
+def analyse_content_provider(all_block_provider_dic, cid):
+    """
+    Parse the content provider for a particular content (cid)
+    :param all_block_provider_dic: dictionary contains {block_cid : providerID}
+    :param cid: cid of the object
+    :return: list of provider for the cid
+    """
+    # append root block provider
+    logging.info(f'Analyze Storage CID {cid}')
+    try:
+        actual_provider = [all_block_provider_dic[cid]]
+    except KeyError:
+        # case when there is no actual provider
+        logging.info(f'Content CID {cid} non reachable')
+        actual_provider = []
+        return actual_provider
+    # read sub blocks provider
+    process = subprocess.Popen(
+        ['/root/ipfs_bin/ipfs', 'ls', cid],
+        stdout=subprocess.PIPE)
+    for line in process.stdout.readlines():
+        line = line.decode('utf-8')
+        line = line.split(" ")
+        # get block cid
+        block_cid = line[0]
+        provider = all_block_provider_dic[block_cid]
+        # add provider if not in list
+        if provider not in actual_provider:
+            actual_provider.append(provider)
+            logging.info(f'CID {cid} adding new provider {provider}')
+
+    return actual_provider
+
+
+def post_process(cid, all_provider_dic, all_block_provider_dic):
     """
     postprocess cid files, i.e ipfs hop, ip hop, rtt, ip etc
+    :param all_block_provider_dic: dic contains block -> provider
     :param all_provider_dic: dic contains cid -> {hosts : provider}
     :param cid: cid of the file
     :return: Stats
     """
     _, ipfs_hop = analyse_ipfs_hops(cid, all_provider_dic[cid])
     logging.info(f'CID {cid} ipfs hop = {ipfs_hop}')
-    providers = get_peer_ip(all_provider_dic[cid])
-    logging.info(f'CID {cid} providers = {providers}')
-    stats = Stats(cid, ipfs_hop, providers)
-    for peer in providers.keys():
-        for address in providers[peer]:
+    actual_provider = analyse_content_provider(all_block_provider_dic, cid)
+    logging.info(f'CID {cid} actual provider {actual_provider}')
+    if ipfs_hop == 0:
+        # case of no result find
+        logging.info(f'NO IPFS INFO FOUND CID {cid}')
+    logging.info(f'CID {cid} getting peer IP values')
+    providers_ips = get_peer_ip(all_provider_dic[cid])
+    logging.info(f'CID {cid} getting actual peer IP values')
+    actual_provider_dic = {provider: "None" for provider in actual_provider}
+    logging.info(f'CID {cid} actual provider dic {actual_provider_dic}')
+    actual_provider_ips = get_peer_ip(actual_provider_dic)
+    stats = Stats(cid, ipfs_hop, providers_ips, actual_provider_ips)
+
+    logging.info(f'CID {cid} getting peer RTT and IP hop info')
+    for peer in providers_ips.keys():
+        for address in providers_ips[peer]:
             get_rtt(address)
             get_ip_hop(address)
-            logging.info(f'Peer {peer} has Address {address.__dict__}')
+            logging.info(f'Address {address.__dict__}')
+
+    logging.info(f'CID {cid} getting actual peer RTT and IP hop info')
+    for peer in actual_provider_ips.keys():
+        for address in actual_provider_ips[peer]:
+            get_rtt(address)
+            get_ip_hop(address)
+            logging.info(f'Address {address.__dict__}')
+
     return stats
 
 
@@ -469,8 +532,18 @@ def main(is_loaded):
     # read daemon log file
     # {cid : result_host_dic={}}
     all_provider_dic = {}
+    all_block_provider_dic = {}  # {block_cid, provider_ID}
     with open(f'{today}_daemon.txt', 'r') as stdin:
         for line in stdin.readlines():
+            # read block provider information
+            if "bitswap.go:455" in line and "Block" in line and "provided" in line:
+                line = line.split(' ')
+                current_cid = line[3].split('\n')[0]
+                provider_id = line[1]
+                logging.info(f'Block {current_cid} provider {provider_id}')
+                all_block_provider_dic[current_cid] = provider_id
+                continue
+            # read findprovs output info
             if "routing.go:532" not in line or "":
                 continue
             index = line.find("cid")
@@ -479,6 +552,7 @@ def main(is_loaded):
             line = line.split(" ")
             cid = line[1]
             if cid not in all_cid:
+                logging.info(f'CID {cid} not in sample files')
                 continue
             if cid not in all_provider_dic.keys():
                 result_host_dic = {}
@@ -486,13 +560,14 @@ def main(is_loaded):
             else:
                 result_host_dic = all_provider_dic[cid]
             result_host_dic[line[5]] = line[3]
-
+    logging.info(f'all_provider_dic = {all_provider_dic}')
+    logging.info(f'all_block_provider_dic = {all_block_provider_dic}')
     # hop
 
     # star multi-threading for post process
     all_stats = []
     with concurrent.futures.ProcessPoolExecutor(max_workers=8) as executor:
-        future_to_postprocess = {executor.submit(post_process, cid, all_provider_dic): cid
+        future_to_postprocess = {executor.submit(post_process, cid, all_provider_dic, all_block_provider_dic): cid
                                  for cid in all_provider_dic}
         for future in concurrent.futures.as_completed(future_to_postprocess):
             cid = future_to_postprocess[future]
@@ -501,7 +576,7 @@ def main(is_loaded):
                 stats = future.result()
             except Exception as exc:
                 logging.info(f'Error {exc}')
-                stats = Stats(cid, None, None)
+                stats = Stats(cid, None, None, None)
             all_stats.append(stats)
             # save progress
             logging.info(f'Saving Progress CID {cid}')
