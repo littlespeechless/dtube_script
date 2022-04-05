@@ -339,6 +339,14 @@ if __name__ == "__main__":
             if vid.local_data is not None:
                 daily_reachable_videos.append(vid)
                 daily_reachable_videos_cid.append(vid.cid)
+            else:
+                # check if the video ever exist in ipfs b4
+                with open(f'{today}/{vid.cid}_provid.txt', 'r') as fin:
+                    for line in fin.readlines():
+                        if "provider:" in line:
+                            daily_reachable_videos.append(vid)
+                            daily_reachable_videos_cid.append(vid.cid)
+                            break
     # add all new reachable video into video database
     for vid in daily_reachable_videos:
         vid: Video
